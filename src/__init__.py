@@ -19,7 +19,17 @@ from aqt.theme import theme_manager
 class AnkiSystemTray:
     def __init__(self, mw):
         """Create a system tray with the Anki icon."""
+
         self.mw = mw
+
+        config = self.mw.addonManager.getConfig(__name__)
+
+        if "show_due" in config and config["show_due"] == False:
+            self.showDueAmount = False
+
+        if "due_font_size" in config:
+            self.dueFontSize = config["due_font_size"]
+
         self.isAnkiFocused = True
         self.isMinimizedToTray = False
         self.lastFocusedWidget = mw
@@ -29,9 +39,13 @@ class AnkiSystemTray:
         self._configureMw()
         self.trayIcon.show()
         self._addHooks()
-        config = self.mw.addonManager.getConfig(__name__)
+
         if config["hide_on_startup"]:
             self.hideAll()
+
+
+    dueFontSize = 16
+    showDueAmount = True
 
     def onActivated(self, reason):
         """Show/hide all Anki windows when the tray icon is clicked.
@@ -88,7 +102,11 @@ class AnkiSystemTray:
     def updateSystemTrayIcon(self, force = False):
         numberOfCardsDue = self._getAmountOfCardsDue()
 
-        if numberOfCardsDue != self._displayedNumberOfCardsDue or force:
+        didDueCardCountChange = numberOfCardsDue != self._displayedNumberOfCardsDue
+        shouldShowDueAmount = self.showDueAmount
+        shouldUpdate = shouldShowDueAmount and didDueCardCountChange
+
+        if shouldUpdate or force:
             self._displayedNumberOfCardsDue = numberOfCardsDue
             self._setSystemTrayIcon(self.trayIcon, numberOfCardsDue)
 
@@ -144,7 +162,7 @@ class AnkiSystemTray:
         textColor = theme_manager.qcolor(colors.STATE_LEARN)
         backgroundColor = theme_manager.qcolor(colors.CANVAS_ELEVATED)
 
-        fontSize = 16
+        fontSize = self.dueFontSize
         sizeRectF = QRectF(0, 32 - fontSize, 32, fontSize)
         sizeRect = QRect(0, 32 - fontSize, 32, fontSize)
 
@@ -172,9 +190,15 @@ class AnkiSystemTray:
         
         icon = QIcon()
         icon.addPixmap(pixmap, QIcon.Mode.Normal, QIcon.State.Off)
-        return icon        
+        return icon
 
     def _getAmountOfCardsDue(self):
+
+        if not self.showDueAmount:
+            # there's no need to
+            # calculate this then
+            return 0
+
         tree = mw.col.sched.deck_due_tree()
         children = tree.children
 
@@ -202,7 +226,7 @@ class AnkiSystemTray:
         
     def _setSystemTrayIcon(self, trayIcon, numberOfReviews):
         displayNumber = self._getCardsDueDisplayNumber(numberOfReviews)
-        shouldShowNumber = numberOfReviews > 0
+        shouldShowNumber = numberOfReviews > 0 and self.showDueAmount
 
         ankiLogo = self._createReviewsIcon(displayNumber, shouldShowNumber)
         trayIcon.setIcon(ankiLogo)
