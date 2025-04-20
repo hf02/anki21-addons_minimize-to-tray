@@ -9,10 +9,11 @@
 import sys
 from types import MethodType
 
-from aqt.qt import sip, Qt, QIcon, QPixmap, QApplication, QMenu, QSystemTrayIcon
+from aqt.qt import sip, Qt, QIcon, QPixmap, QApplication, QMenu, QSystemTrayIcon, QPainter, QColor, QRect, QFont, QRectF, QPainterPath 
 
-from aqt import gui_hooks, mw  # mw is the INSTANCE of the main window
+from aqt import colors, gui_hooks, mw  # mw is the INSTANCE of the main window
 from aqt.main import AnkiQt
+from aqt.theme import theme_manager
 
 
 class AnkiSystemTray:
@@ -23,10 +24,11 @@ class AnkiSystemTray:
         self.isMinimizedToTray = False
         self.lastFocusedWidget = mw
         self.explicitlyHiddenWindows = []
-        self.trayIcon = self._createTrayIcon()
+        self.trayIcon = self._createSystemTrayIcon()
         QApplication.setQuitOnLastWindowClosed(False)
         self._configureMw()
         self.trayIcon.show()
+        self._addHooks()
         config = self.mw.addonManager.getConfig(__name__)
         if config["hide_on_startup"]:
             self.hideAll()
@@ -82,6 +84,16 @@ class AnkiSystemTray:
             w.hide()
         self.isMinimizedToTray = True
 
+    def updateSystemTrayIcon(self):
+        self._updateSystemTrayIcon(self.trayIcon)
+
+    def _addHooks(self):
+        updateFunction = lambda *args : self.updateSystemTrayIcon()
+
+        gui_hooks.theme_did_change.append(updateFunction)
+        gui_hooks.state_did_change.append(updateFunction)
+        gui_hooks.operation_did_execute.append(updateFunction)
+
     def _showWindows(self, windows):
         for w in windows:
             if sip.isdeleted(w):
@@ -119,14 +131,82 @@ class AnkiSystemTray:
             w.windowState() == Qt.WindowState.WindowMinimized
             for w in self._visibleWindows()
         )
+        
+    def _createReviewsIcon(self, string, renderNumber = True):
+        pixmap = QPixmap("icons:anki.png")
 
-    def _createTrayIcon(self):
+        textColor = theme_manager.qcolor(colors.STATE_LEARN)
+        backgroundColor = theme_manager.qcolor(colors.CANVAS_ELEVATED)
+
+        fontSize = 16
+        sizeRectF = QRectF(0, 32 - fontSize, 32, fontSize)
+        sizeRect = QRect(0, 32 - fontSize, 32, fontSize)
+
+        if renderNumber:
+            painter = QPainter(pixmap)
+
+            # Draw number container
+
+            roundedRectanglePath = QPainterPath()
+            roundedRectanglePath.addRoundedRect(sizeRectF, 5, 5)
+
+            painter.fillPath(roundedRectanglePath, backgroundColor)
+
+            # Draw number
+
+            font = painter.font()
+            font.setPixelSize(fontSize)
+            font.setWeight(QFont.Weight.Bold)
+            painter.setFont(font)
+
+            painter.setPen(textColor)
+            painter.drawText(sizeRect, Qt.AlignmentFlag.AlignCenter, string)
+
+            painter.end()
+        
+        icon = QIcon()
+        icon.addPixmap(pixmap, QIcon.Mode.Normal, QIcon.State.Off)
+        return icon        
+
+    def _getAmountOfCardsDue(self):
+        tree = mw.col.sched.deck_due_tree()
+        children = tree.children
+
+        total = 0
+
+        for child in children:
+            total += child.new_count
+            total += child.learn_count
+            total += child.review_count
+        
+        return total
+    
+    def _formatNumber(self, number):
+        numberString = str(number)
+
+        if number < 1000:
+            return str(number)
+        if number >= 1000 and number < 10000:
+            return f"{numberString[0]}.{numberString[1]}k"
+        else:
+            return "∞"
+    
+    def _getCardsDueDisplayNumber(self, amount):
+        return self._formatNumber(amount)
+        
+    def _updateSystemTrayIcon(self, trayIcon):
+        numberOfReviews = self._getAmountOfCardsDue()
+        displayNumber = self._getCardsDueDisplayNumber(numberOfReviews)
+        shouldShowNumber = numberOfReviews > 0
+
+        ankiLogo = self._createReviewsIcon(displayNumber, shouldShowNumber)
+        trayIcon.setIcon(ankiLogo)
+
+    def _createSystemTrayIcon(self):
         trayIcon = QSystemTrayIcon(self.mw)
-        ankiLogo = QIcon()
-        ankiLogo.addPixmap(
-            QPixmap("icons:anki.png"), QIcon.Mode.Normal, QIcon.State.Off
-        )
-        trayIcon.setIcon(QIcon.fromTheme("anki", ankiLogo))
+
+        self._updateSystemTrayIcon(trayIcon)
+
         trayMenu = QMenu(self.mw)
         trayIcon.setContextMenu(trayMenu)
         showAction = trayMenu.addAction("Show all windows")
