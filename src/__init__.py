@@ -199,7 +199,7 @@ class AnkiSystemTray:
             # calculate this then
             return 0
 
-        tree = mw.col.sched.deck_due_tree()
+        tree = self.mw.col.sched.deck_due_tree()
         children = tree.children
 
         total = 0
