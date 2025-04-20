@@ -84,13 +84,19 @@ class AnkiSystemTray:
             w.hide()
         self.isMinimizedToTray = True
 
-    def updateSystemTrayIcon(self):
-        self._updateSystemTrayIcon(self.trayIcon)
+    _displayedNumberOfCardsDue = 0
+    def updateSystemTrayIcon(self, force = False):
+        numberOfCardsDue = self._getAmountOfCardsDue()
+
+        if numberOfCardsDue != self._displayedNumberOfCardsDue or force:
+            self._displayedNumberOfCardsDue = numberOfCardsDue
+            self._setSystemTrayIcon(self.trayIcon, numberOfCardsDue)
 
     def _addHooks(self):
         updateFunction = lambda *args : self.updateSystemTrayIcon()
+        forceUpdateFunction = lambda *args : self.updateSystemTrayIcon(True)
 
-        gui_hooks.theme_did_change.append(updateFunction)
+        gui_hooks.theme_did_change.append(forceUpdateFunction)
         gui_hooks.state_did_change.append(updateFunction)
         gui_hooks.operation_did_execute.append(updateFunction)
 
@@ -194,8 +200,7 @@ class AnkiSystemTray:
     def _getCardsDueDisplayNumber(self, amount):
         return self._formatNumber(amount)
         
-    def _updateSystemTrayIcon(self, trayIcon):
-        numberOfReviews = self._getAmountOfCardsDue()
+    def _setSystemTrayIcon(self, trayIcon, numberOfReviews):
         displayNumber = self._getCardsDueDisplayNumber(numberOfReviews)
         shouldShowNumber = numberOfReviews > 0
 
@@ -205,7 +210,8 @@ class AnkiSystemTray:
     def _createSystemTrayIcon(self):
         trayIcon = QSystemTrayIcon(self.mw)
 
-        self._updateSystemTrayIcon(trayIcon)
+        numberOfReviews = self._getAmountOfCardsDue()
+        self._setSystemTrayIcon(trayIcon, numberOfReviews)
 
         trayMenu = QMenu(self.mw)
         trayIcon.setContextMenu(trayMenu)
