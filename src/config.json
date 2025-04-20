@@ -1,1 +1,5 @@
-{"hide_on_startup": false} 
+{
+  "hide_on_startup": false,
+  "show_due": true,
+  "due_font_size": 14
+}
